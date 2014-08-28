@@ -1,0 +1,272 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+	<head>
+		<title>ECDSA</title>
+		
+		<script src="parallel.js"></script>
+		<script type="text/javascript" src="ec.js"></script>
+		<script type="text/javascript" src="sec.js"></script>
+		<script type="text/javascript" src="jsbn.js"></script>
+		<script type="text/javascript" src="jsbn2.js"></script>
+		<script type="text/javascript" src="prng4.js"></script>
+		<script type="text/javascript" src="rng.js"></script>
+		
+		<script type="text/javascript" src="crypto-js/bitcoin.js"></script>
+		<script type="text/javascript" src="crypto-js/util.js"></script>
+		<script type="text/javascript" src="crypto-js/ecdsa.js"></script> 
+		<script type="text/javascript" src="crypto-js/crypto.js"></script>
+		<script type="text/javascript" src="crypto-js/sha256.js"></script>
+		<script type="text/javascript">
+			var usedCurve = "brainpoolP512t1";	
+			
+			function do_init() {
+				if(document.f.p.value.length == 0) set_ec_params(usedCurve);
+			}
+			
+			function do_status(s) {
+				document.f.status.value = s;
+			}
+			
+			function get_curve() {
+				return new ECCurveFp(new BigInteger(document.f.p.value, 16),
+					new BigInteger(document.f.a.value, 16),
+					new BigInteger(document.f.b.value, 16));
+			}
+
+			function get_G(curve) {
+				return new ECPointFp(curve,
+					curve.fromBigInteger(new BigInteger(document.f.G_x.value, 16)),
+					curve.fromBigInteger(new BigInteger(document.f.G_y.value, 16)));
+			}
+			
+			function set_ec_params(name) {
+				var c = getSECCurveByName(name);
+
+				document.f.p.value = c.getCurve().getQ().toString(16);
+				document.f.a.value = c.getCurve().getA().toBigInteger().toString(16);
+				document.f.b.value = c.getCurve().getB().toBigInteger().toString(16);
+				document.f.G_x.value = c.getG().getX().toBigInteger().toString(16);
+				document.f.G_y.value = c.getG().getY().toBigInteger().toString(16);
+				document.f.q.value = c.getN().toString(16);
+				
+				do_status("Using " + name + " EC parameters");
+			}
+			
+			function getRandomBigInt(){
+				var rand_arr = new Uint8Array(64);
+				window.crypto.getRandomValues(rand_arr);
+				var tmpstring;
+				var string512 = "";
+				
+				for (var i = 0; i < rand_arr.length; i++) {
+					tmpstring="";
+					if (rand_arr[i].toString(2).length<8){
+						for(var j = 0;j<8-rand_arr[i].toString(2).length;j++){
+							tmpstring+=0;
+						}
+						tmpstring+=rand_arr[i].toString(2);
+					}
+					else{
+						tmpstring=rand_arr[i].toString(2);
+					}
+					string512 += tmpstring;
+				}
+				var res = new BigInteger(string512, 2);
+				return res;
+			}
+			
+			//TODO: range of random number is wrong
+			function generatePrivateKey(){
+				var before = new Date();
+				document.f.priv_key.value=getRandomBigInt().toString(16);
+				var after = new Date();
+				do_status("Private key in " + (after - before) + "ms.");
+			}
+			
+			function generatePublicKey(){
+				var curve = get_curve();
+				var G = get_G(curve);
+				var priv = new BigInteger(document.f.priv_key.value, 16);
+				
+				var before = new Date();
+				var N = G.multiply(priv);
+				var after = new Date();
+				
+				if(N.isInfinity()){
+					document.f.Q_x.value="0";
+					document.f.Q_y.value="0";
+				}
+				else{
+					document.f.pub_x.value = N.getX().toBigInteger().toString(16);
+					document.f.pub_y.value = N.getY().toBigInteger().toString(16);
+				}
+				
+				do_status("Public key in " + (after - before) + "ms.");
+				return (after-before);
+			}
+			
+			function hash(){
+				if (document.f.input.value.length == 0) {
+					alert("no input text - nothing to hash.");
+					return;
+				}
+				
+				var before = new Date();
+				var hash = Crypto.SHA256(document.f.input.value);
+				var after = new Date();
+				
+				document.f.hashed_input.value = hash;
+				
+				do_status("plaintext hashed in " + (after - before) + "ms.");
+			}
+			
+			function sign(){			
+				if (document.f.hashed_input.value.length == 0) {
+					alert("no hash - nothing to sign.");
+					return;
+				}
+				
+				var hash = Crypto.util.hexToBytes(document.f.hashed_input.value);
+				var priv = new BigInteger(document.f.priv_key.value, 16);
+				var currentHex = "";
+				
+				var before = new Date();
+				//var signature = Bitcoin.ECDSA.sign(hash, priv);
+				var signature = Bitcoin.ECDSA.sign(hash, priv);
+				
+				var after = new Date();
+				
+				document.f.signed_hash.value = Crypto.util.bytesToHex(signature);
+				
+				do_status("plaintext hash digitally signed in " + (after - before) + "ms.");
+			}
+			
+			function verify(){
+				if (document.f.signed_hash.value.length == 0) {
+					alert("no signature - nothing to verify.");
+					return;
+				}
+
+				var hash = Crypto.util.hexToBytes(document.f.hashed_input.value);
+				var sig = Crypto.util.hexToBytes(document.f.signed_hash.value);
+				var pubkey = new ECPointFp(
+					getSECCurveByName(usedCurve).curve, 
+					new ECFieldElementFp(new BigInteger(document.f.p.value, 16), new BigInteger(document.f.pub_x.value, 16)), 
+					new ECFieldElementFp(new BigInteger(document.f.p.value, 16), new BigInteger(document.f.pub_y.value, 16)),
+					null
+				);
+				//var pubkeyEncoded = pubkey.getEncoded(false);
+
+				var before = new Date();
+				//var ok = Bitcoin.ECDSA.verify(hash, sig, pubkeyEncoded) ? "OK" : "Error";
+				var ok = Bitcoin.ECDSA.verify(hash, sig, pubkey) ? "OK" : "Error";
+				var after = new Date();
+				
+				do_status("digital signature verified in " + (after - before) + "ms. Result: " + ok);
+			}
+			
+			function pointMult(){
+				var curve = get_curve();
+				var G = get_G(curve);
+				var q = new BigInteger(document.f.q.value, 16);
+				
+				var before = new Date();
+				var N = G.multiply(q);
+				var after = new Date();
+				
+				if(N.isInfinity()){
+					document.f.Q_x.value="0";
+					document.f.Q_y.value="0";
+				}
+				else{
+					document.f.Q_x.value = N.getX().toBigInteger().toString(16);
+					document.f.Q_y.value = N.getY().toBigInteger().toString(16);
+				}
+				
+				do_status("Point multiplication performed in " + (after - before) + "ms.");
+				return (after-before);
+			}
+			
+		</script>
+		
+		<style type="text/css">
+			body {background-color:#FFFFCC;
+			      margin-left:100px;}
+			h1 {color:blue;}
+		</style>
+	</head>
+	<body onload="do_init();">
+		<h1>ECDSA</h1>
+		
+		<p>
+			Elliptic curve: y<sup>2</sup> = x<sup>3</sup> + ax + b mod p <br />
+			<input type="radio" name="curve" onclick="usedCurve = 'brainpoolP256r1'; set_ec_params(usedCurve);"> brainpoolP256r1<br>
+			<input type="radio" name="curve" onclick="usedCurve = 'brainpoolP512r1'; set_ec_params(usedCurve);"> brainpoolP512r1<br>
+			<input type="radio" name="curve" onclick="usedCurve = 'brainpoolP512t1'; set_ec_params(usedCurve);"> brainpoolP512t1
+		</p>
+		
+		<p>
+			<form name="f" onsubmit="return false;">
+			<table border="1">
+				<tr>
+					<td valign="top">
+						<table border="0">
+							<tr>
+								<td>a<br><textarea name="a" cols="45" rows="4"></textarea></td>
+								<td>b<br><textarea name="b" cols="45" rows="4"></textarea></td>
+							</tr>
+							<tr>
+								<td>G<sub>x</sub><br><textarea name="G_x" cols="45" rows="4"></textarea></td>
+								<td>G<sub>y</sub><br><textarea name="G_y" cols="45" rows="4"></textarea></td>
+							</tr>
+							<tr>
+								<td>p (base field)<br><textarea name="p" cols="45" rows="4"></textarea></td>
+								<td>q (prime order of the group generated by G)<br><textarea name="q" cols="45" rows="4"></textarea></td>
+							</tr>
+							<tr>
+								<td>
+									<input type="button" value="Q=qG" onclick="pointMult()"><br>
+								</td>
+								<td>
+									Status<br><input type="text" name="status" size="31"><br>
+								</td>
+							</tr>
+							<tr>
+								<td>Q<sub>x</sub><br><textarea name="Q_x" cols="45" rows="4"></textarea></td>
+								<td>Q<sub>y</sub><br><textarea name="Q_y" cols="45" rows="4"></textarea></td>
+							</tr>
+						</table>
+					</td>
+					<td valign="top">
+						<table border="0">
+							<tr>
+								<td>private key<br><textarea name="priv_key" cols="45" rows="4"></textarea></td>
+								<td>
+									<input type="button" value="private key" onclick="generatePrivateKey()"><br>
+									<input type="button" value="public key" onclick="generatePublicKey()">
+								</td>
+							</tr>
+							<tr>
+								<td>public x-coord<br><textarea name="pub_x" cols="45" rows="4"></textarea></td>
+								<td>public y-coord<br><textarea name="pub_y" cols="45" rows="4"></textarea></td>
+							</tr>
+							<tr>
+								<td>input<br><textarea name="input" cols="45" rows="4"></textarea></td>
+								<td>hashed input<br><textarea name="hashed_input" cols="45" rows="4"></textarea></td>
+							</tr>
+							<tr>
+								<td>
+									<input type="button" value="hash" onclick="hash()"> <input type="button" value="sign" onclick="sign()"> <input type="button" value="verify" onclick="verify()">
+								</td>
+							</tr>
+							<tr>
+								<td>signed hash<br><textarea name="signed_hash" cols="45" rows="4"></textarea></td>
+							</tr>
+						</table>
+					</td>
+				</tr>
+			</table>
+			</form>
+		</p>
+	</body>
+</html>
