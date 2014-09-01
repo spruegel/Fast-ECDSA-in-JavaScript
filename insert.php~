@@ -3,7 +3,7 @@
 $dbname="testdb"; 
 $dbhost="localhost";
 $dbuser="testuser";
-$dbpass="secret"; 
+$dbpass="geheim"; 
 $dbconnection = mysql_connect($dbhost, $dbuser, $dbpass) or die(mysql_error());
 
 mysql_select_db($dbname,$dbconnection) or die(mysql_error()); 
