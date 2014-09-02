@@ -309,7 +309,7 @@
 									<input type="button" value="precompute" onclick="precompute()"> (depends on G)
 								</td>
 								<td>
-									Status<br><input type="text" name="status" size="31"><br>
+									Status<br><textarea name="status" cols="45" rows="4"></textarea>
 								</td>
 							</tr>
 							<tr>
